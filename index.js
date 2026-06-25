@@ -8,52 +8,58 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// =====================
+// CONFIG
+// =====================
 const API_KEY = process.env.FOOTBALL_API_KEY;
 
-/**
- * HEALTH CHECK
- */
+const BASE_URL = "https://v3.football.api-sports.io";
+
+// =====================
+// HEALTH CHECK
+// =====================
 app.get("/", (req, res) => {
   res.json({
     status: "Placar Mágico API rodando 🚀",
   });
 });
 
-/**
- * MATCHES TODAY
- */
+// =====================
+// MATCHES TODAY
+// =====================
 app.get("/matches/today", async (req, res) => {
   try {
     const today = new Date().toISOString().split("T")[0];
 
-    const response = await axios.get(
-      "https://v3.football.api-sports.io/fixtures",
-      {
-        headers: {
-          "x-apisports-key": API_KEY,
-        },
-        params: {
-          date: today,
-          league: 71, // 🔥 Brasileirão (TESTE FORÇADO)
-        },
-      }
-    );
+    const response = await axios.get(`${BASE_URL}/fixtures`, {
+      headers: {
+        "x-apisports-key": API_KEY,
+      },
+      params: {
+        date: today,
+      },
+    });
 
     const matches = response.data.response.map((item) => ({
       league: item.league.name,
       country: item.league.country,
       home: item.teams.home.name,
       away: item.teams.away.name,
+
       homeGoals: item.goals.home,
       awayGoals: item.goals.away,
+
       status: item.fixture.status.short,
       time: item.fixture.date,
+
+      // base para futura previsão
+      homeXG: 1.4,
+      awayXG: 1.1,
     }));
 
     res.json({
       success: true,
       count: matches.length,
-      league: "filtered",
       matches,
     });
   } catch (error) {
@@ -64,9 +70,9 @@ app.get("/matches/today", async (req, res) => {
   }
 });
 
-/**
- * BACKTEST (JOGOS PASSADOS)
- */
+// =====================
+// BACKTEST (JOGOS PASSADOS)
+// =====================
 app.get("/backtest", async (req, res) => {
   try {
     const { date } = req.query;
@@ -78,24 +84,26 @@ app.get("/backtest", async (req, res) => {
       });
     }
 
-    const response = await axios.get(
-      "https://v3.football.api-sports.io/fixtures",
-      {
-        headers: {
-          "x-apisports-key": API_KEY,
-        },
-        params: {
-          date,
-        },
-      }
-    );
+    const response = await axios.get(`${BASE_URL}/fixtures`, {
+      headers: {
+        "x-apisports-key": API_KEY,
+      },
+      params: {
+        date,
+      },
+    });
 
     const matches = response.data.response.map((item) => ({
       league: item.league.name,
+      country: item.league.country,
+
       home: item.teams.home.name,
       away: item.teams.away.name,
+
       homeGoals: item.goals.home,
       awayGoals: item.goals.away,
+
+      status: item.fixture.status.short,
     }));
 
     res.json({
@@ -111,8 +119,11 @@ app.get("/backtest", async (req, res) => {
   }
 });
 
+// =====================
+// START SERVER
+// =====================
 const PORT = process.env.PORT || 10000;
 
 app.listen(PORT, () => {
-  console.log(`API rodando na porta ${PORT}`);
+  console.log(`🚀 API rodando na porta ${PORT}`);
 });
