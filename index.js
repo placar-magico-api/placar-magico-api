@@ -3,13 +3,22 @@ const express = require("express");
 const cors = require("cors");
 const axios = require("axios");
 
-const app = express(); // 🔥 ISSO É OBRIGATÓRIO (NÃO PODE SUMIR)
+const app = express();
 
 app.use(cors());
 app.use(express.json());
 
+// =====================
+// ENV VAR (IMPORTANTE)
+// =====================
 const API_KEY = process.env.FOOTBALL_API_KEY;
-const BASE_URL = "https://v3.football.api-sports.io";
+
+// =====================
+// VALIDATION CHECK
+// =====================
+if (!API_KEY) {
+  console.error("❌ FOOTBALL_API_KEY não encontrada no .env ou Render");
+}
 
 // =====================
 // HEALTH CHECK
@@ -17,6 +26,7 @@ const BASE_URL = "https://v3.football.api-sports.io";
 app.get("/", (req, res) => {
   res.json({
     status: "Placar Mágico API rodando 🚀",
+    api_key_loaded: !!API_KEY,
   });
 });
 
@@ -27,14 +37,17 @@ app.get("/matches/today", async (req, res) => {
   try {
     const today = new Date().toISOString().split("T")[0];
 
-    const response = await axios.get(`${BASE_URL}/fixtures`, {
-      headers: {
-        "x-apisports-key": API_KEY,
-      },
-      params: {
-        date: today,
-      },
-    });
+    const response = await axios.get(
+      "https://v3.football.api-sports.io/fixtures",
+      {
+        headers: {
+          "x-apisports-key": API_KEY, // ✔ CORRETO PARA API OFICIAL
+        },
+        params: {
+          date: today,
+        },
+      }
+    );
 
     const matches = response.data.response.map((item) => ({
       league: item.league.name,
@@ -53,6 +66,8 @@ app.get("/matches/today", async (req, res) => {
       matches,
     });
   } catch (error) {
+    console.error("MATCHES ERROR:", error.response?.data || error.message);
+
     res.status(500).json({
       success: false,
       error: error.response?.data || error.message,
@@ -61,7 +76,7 @@ app.get("/matches/today", async (req, res) => {
 });
 
 // =====================
-// BACKTEST
+// BACKTEST (CORRIGIDO)
 // =====================
 app.get("/backtest", async (req, res) => {
   try {
@@ -74,14 +89,17 @@ app.get("/backtest", async (req, res) => {
       });
     }
 
-    const response = await axios.get(`${BASE_URL}/fixtures`, {
-      headers: {
-        "x-apisports-key": API_KEY,
-      },
-      params: {
-        date,
-      },
-    });
+    const response = await axios.get(
+      "https://v3.football.api-sports.io/fixtures",
+      {
+        headers: {
+          "x-apisports-key": API_KEY,
+        },
+        params: {
+          date: date,
+        },
+      }
+    );
 
     const matches = response.data.response.map((item) => ({
       league: item.league.name,
@@ -97,6 +115,8 @@ app.get("/backtest", async (req, res) => {
       matches,
     });
   } catch (error) {
+    console.error("BACKTEST ERROR:", error.response?.data || error.message);
+
     res.status(500).json({
       success: false,
       error: error.response?.data || error.message,
@@ -105,7 +125,7 @@ app.get("/backtest", async (req, res) => {
 });
 
 // =====================
-// START SERVER
+// START SERVER (CRÍTICO NO RENDER)
 // =====================
 const PORT = process.env.PORT || 10000;
 
