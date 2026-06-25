@@ -55,7 +55,7 @@ app.get("/matches/today", async (req, res) => {
           },
           params: {
             league: 39, // Premier League fallback garantido
-            season: 2024,
+            season: 2026,
           },
         }
       );
