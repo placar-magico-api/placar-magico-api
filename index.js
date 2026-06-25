@@ -24,14 +24,13 @@ app.get("/", (req, res) => {
 });
 
 // =====================
-// MATCHES TODAY (COM FALLBACK REAL)
+// MATCHES TODAY (ROBUSTO - SEM FALLBACK QUE QUEBRA)
 // =====================
 app.get("/matches/today", async (req, res) => {
   try {
     const today = new Date().toISOString().split("T")[0];
 
-    // 1️⃣ tenta pegar jogos do dia (GLOBAL)
-    const todayResponse = await axios.get(
+    const response = await axios.get(
       "https://v3.football.api-sports.io/fixtures",
       {
         headers: {
@@ -43,47 +42,17 @@ app.get("/matches/today", async (req, res) => {
       }
     );
 
-    let matches = todayResponse.data.response || [];
+    const matches = response.data.response || [];
 
-    // 2️⃣ SE VIER VAZIO → fallback automático
-    if (matches.length === 0) {
-      const fallbackResponse = await axios.get(
-        "https://v3.football.api-sports.io/fixtures",
-        {
-          headers: {
-            "x-apisports-key": API_KEY,
-          },
-          params: {
-            league: 39, // Premier League fallback garantido
-            season: 2026,
-          },
-        }
-      );
-
-      matches = fallbackResponse.data.response || [];
-
-      return res.json({
-        success: true,
-        source: "fallback-league-39",
-        count: matches.length,
-        matches: matches.map((item) => ({
-          league: item.league.name,
-          country: item.league.country,
-          home: item.teams.home.name,
-          away: item.teams.away.name,
-          homeGoals: item.goals.home,
-          awayGoals: item.goals.away,
-          status: item.fixture.status.short,
-          time: item.fixture.date,
-        })),
-      });
-    }
-
-    // 3️⃣ resposta normal
+    // 🔥 NÃO ESCONDE MAIS O PROBLEMA
     return res.json({
       success: true,
       source: "today",
       count: matches.length,
+      message:
+        matches.length === 0
+          ? "Nenhum jogo encontrado para hoje nessa API/plano."
+          : "Jogos carregados com sucesso",
       matches: matches.map((item) => ({
         league: item.league.name,
         country: item.league.country,
@@ -104,7 +73,7 @@ app.get("/matches/today", async (req, res) => {
 });
 
 // =====================
-// BACKTEST (SEM DEPENDER DE LEAGUE)
+// BACKTEST (COM SEASON DINÂMICA - CORRIGIDO)
 // =====================
 app.get("/backtest", async (req, res) => {
   try {
@@ -117,6 +86,8 @@ app.get("/backtest", async (req, res) => {
       });
     }
 
+    const season = new Date(date).getFullYear();
+
     const response = await axios.get(
       "https://v3.football.api-sports.io/fixtures",
       {
@@ -125,6 +96,7 @@ app.get("/backtest", async (req, res) => {
         },
         params: {
           date,
+          season,
         },
       }
     );
@@ -133,7 +105,12 @@ app.get("/backtest", async (req, res) => {
 
     return res.json({
       success: true,
+      source: "backtest",
       count: matches.length,
+      message:
+        matches.length === 0
+          ? "Nenhum jogo encontrado nessa data/season (limitação da API ou data sem jogos)."
+          : "Backtest carregado com sucesso",
       matches: matches.map((item) => ({
         league: item.league.name,
         country: item.league.country,
