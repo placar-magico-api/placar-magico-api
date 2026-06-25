@@ -34,6 +34,7 @@ app.get("/matches/today", async (req, res) => {
         },
         params: {
           date: today,
+          league: 71, // 🔥 Brasileirão (TESTE FORÇADO)
         },
       }
     );
@@ -43,10 +44,8 @@ app.get("/matches/today", async (req, res) => {
       country: item.league.country,
       home: item.teams.home.name,
       away: item.teams.away.name,
-
-      homeXG: 1.4,
-      awayXG: 1.1,
-
+      homeGoals: item.goals.home,
+      awayGoals: item.goals.away,
       status: item.fixture.status.short,
       time: item.fixture.date,
     }));
@@ -54,6 +53,7 @@ app.get("/matches/today", async (req, res) => {
     res.json({
       success: true,
       count: matches.length,
+      league: "filtered",
       matches,
     });
   } catch (error) {
