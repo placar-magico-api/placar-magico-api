@@ -9,16 +9,18 @@ app.use(cors());
 app.use(express.json());
 
 // =====================
-// ENV VAR (IMPORTANTE)
+// CONFIG
 // =====================
 const API_KEY = process.env.FOOTBALL_API_KEY;
 
-// =====================
-// VALIDATION CHECK
-// =====================
-if (!API_KEY) {
-  console.error("❌ FOOTBALL_API_KEY não encontrada no .env ou Render");
-}
+// Campeonatos base (fallback para não dar vazio)
+const DEFAULT_LEAGUES = [
+  71,   // Serie A Brasil
+  39,   // Premier League
+  140,  // La Liga
+  78,   // Bundesliga
+  135,  // Serie A Itália
+];
 
 // =====================
 // HEALTH CHECK
@@ -26,48 +28,60 @@ if (!API_KEY) {
 app.get("/", (req, res) => {
   res.json({
     status: "Placar Mágico API rodando 🚀",
-    api_key_loaded: !!API_KEY,
+    api_loaded: !!API_KEY,
   });
 });
 
 // =====================
-// MATCHES TODAY
+// MATCHES TODAY (COM FALLBACK)
 // =====================
 app.get("/matches/today", async (req, res) => {
   try {
     const today = new Date().toISOString().split("T")[0];
 
-    const response = await axios.get(
-      "https://v3.football.api-sports.io/fixtures",
-      {
-        headers: {
-          "x-apisports-key": API_KEY, // ✔ CORRETO PARA API OFICIAL
-        },
-        params: {
-          date: today,
-        },
-      }
-    );
+    let allMatches = [];
 
-    const matches = response.data.response.map((item) => ({
-      league: item.league.name,
-      country: item.league.country,
-      home: item.teams.home.name,
-      away: item.teams.away.name,
-      homeGoals: item.goals.home,
-      awayGoals: item.goals.away,
-      status: item.fixture.status.short,
-      time: item.fixture.date,
-    }));
+    // loop em campeonatos principais
+    for (const league of DEFAULT_LEAGUES) {
+      try {
+        const response = await axios.get(
+          "https://v3.football.api-sports.io/fixtures",
+          {
+            headers: {
+              "x-apisports-key": API_KEY,
+              "x-apisports-host": "v3.football.api-sports.io",
+            },
+            params: {
+              date: today,
+              league: league,
+              timezone: "America/Sao_Paulo",
+            },
+          }
+        );
+
+        const matches = (response.data.response || []).map((item) => ({
+          league: item.league.name,
+          country: item.league.country,
+          home: item.teams.home.name,
+          away: item.teams.away.name,
+          homeGoals: item.goals.home,
+          awayGoals: item.goals.away,
+          status: item.fixture.status.short,
+          time: item.fixture.date,
+        }));
+
+        allMatches = allMatches.concat(matches);
+      } catch (err) {
+        console.log(`Erro league ${league}`, err.message);
+      }
+    }
 
     res.json({
       success: true,
-      count: matches.length,
-      matches,
+      count: allMatches.length,
+      matches: allMatches,
     });
   } catch (error) {
-    console.error("MATCHES ERROR:", error.response?.data || error.message);
-
     res.status(500).json({
       success: false,
       error: error.response?.data || error.message,
@@ -76,7 +90,7 @@ app.get("/matches/today", async (req, res) => {
 });
 
 // =====================
-// BACKTEST (CORRIGIDO)
+// BACKTEST (JOGOS PASSADOS)
 // =====================
 app.get("/backtest", async (req, res) => {
   try {
@@ -89,34 +103,45 @@ app.get("/backtest", async (req, res) => {
       });
     }
 
-    const response = await axios.get(
-      "https://v3.football.api-sports.io/fixtures",
-      {
-        headers: {
-          "x-apisports-key": API_KEY,
-        },
-        params: {
-          date: date,
-        },
-      }
-    );
+    let allMatches = [];
 
-    const matches = response.data.response.map((item) => ({
-      league: item.league.name,
-      home: item.teams.home.name,
-      away: item.teams.away.name,
-      homeGoals: item.goals.home,
-      awayGoals: item.goals.away,
-    }));
+    for (const league of DEFAULT_LEAGUES) {
+      try {
+        const response = await axios.get(
+          "https://v3.football.api-sports.io/fixtures",
+          {
+            headers: {
+              "x-apisports-key": API_KEY,
+              "x-apisports-host": "v3.football.api-sports.io",
+            },
+            params: {
+              date,
+              league,
+              timezone: "America/Sao_Paulo",
+            },
+          }
+        );
+
+        const matches = (response.data.response || []).map((item) => ({
+          league: item.league.name,
+          home: item.teams.home.name,
+          away: item.teams.away.name,
+          homeGoals: item.goals.home,
+          awayGoals: item.goals.away,
+        }));
+
+        allMatches = allMatches.concat(matches);
+      } catch (err) {
+        console.log(`Erro backtest league ${league}`, err.message);
+      }
+    }
 
     res.json({
       success: true,
-      count: matches.length,
-      matches,
+      count: allMatches.length,
+      matches: allMatches,
     });
   } catch (error) {
-    console.error("BACKTEST ERROR:", error.response?.data || error.message);
-
     res.status(500).json({
       success: false,
       error: error.response?.data || error.message,
@@ -125,7 +150,7 @@ app.get("/backtest", async (req, res) => {
 });
 
 // =====================
-// START SERVER (CRÍTICO NO RENDER)
+// START SERVER
 // =====================
 const PORT = process.env.PORT || 10000;
 
