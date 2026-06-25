@@ -3,16 +3,12 @@ const express = require("express");
 const cors = require("cors");
 const axios = require("axios");
 
-const app = express();
+const app = express(); // 🔥 ISSO É OBRIGATÓRIO (NÃO PODE SUMIR)
 
 app.use(cors());
 app.use(express.json());
 
-// =====================
-// CONFIG
-// =====================
 const API_KEY = process.env.FOOTBALL_API_KEY;
-
 const BASE_URL = "https://v3.football.api-sports.io";
 
 // =====================
@@ -45,16 +41,10 @@ app.get("/matches/today", async (req, res) => {
       country: item.league.country,
       home: item.teams.home.name,
       away: item.teams.away.name,
-
       homeGoals: item.goals.home,
       awayGoals: item.goals.away,
-
       status: item.fixture.status.short,
       time: item.fixture.date,
-
-      // base para futura previsão
-      homeXG: 1.4,
-      awayXG: 1.1,
     }));
 
     res.json({
@@ -71,7 +61,7 @@ app.get("/matches/today", async (req, res) => {
 });
 
 // =====================
-// BACKTEST (JOGOS PASSADOS)
+// BACKTEST
 // =====================
 app.get("/backtest", async (req, res) => {
   try {
@@ -95,15 +85,10 @@ app.get("/backtest", async (req, res) => {
 
     const matches = response.data.response.map((item) => ({
       league: item.league.name,
-      country: item.league.country,
-
       home: item.teams.home.name,
       away: item.teams.away.name,
-
       homeGoals: item.goals.home,
       awayGoals: item.goals.away,
-
-      status: item.fixture.status.short,
     }));
 
     res.json({
