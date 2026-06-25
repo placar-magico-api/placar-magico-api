@@ -27,7 +27,7 @@ app.get("/matches/today", async (req, res) => {
     const today = new Date().toISOString().split("T")[0];
 
     const response = await axios.get(
-      "https://api-football-v1.p.rapidapi.com/v3/fixtures",
+      "https://v3.football.api-sports.io/fixtures",
       {
         headers: {
           "x-apisports-key": API_KEY,
@@ -79,7 +79,7 @@ app.get("/backtest", async (req, res) => {
     }
 
     const response = await axios.get(
-      "https://api-football-v1.p.rapidapi.com/v3/fixtures",
+      "https://v3.football.api-sports.io/fixtures",
       {
         headers: {
           "x-apisports-key": API_KEY,
