@@ -20,14 +20,14 @@ app.get("/", (req, res) => {
 });
 
 /**
- * MATCHES TODAY
+ * MATCHES TODAY (API OFICIAL)
  */
 app.get("/matches/today", async (req, res) => {
   try {
     const today = new Date().toISOString().split("T")[0];
 
     const response = await axios.get(
-      "https://api-football-v1.p.rapidapi.com/v3/fixtures",
+      "https://v3.football.api-sports.io/fixtures",
       {
         headers: {
           "x-apisports-key": API_KEY,
@@ -45,7 +45,6 @@ app.get("/matches/today", async (req, res) => {
         home: item.teams.home.name,
         away: item.teams.away.name,
 
-        // base inicial (vamos evoluir para Poisson real)
         homeXG: 1.4,
         awayXG: 1.1,
 
@@ -62,13 +61,13 @@ app.get("/matches/today", async (req, res) => {
   } catch (error) {
     res.status(500).json({
       success: false,
-      error: error.message,
+      error: error.response?.data || error.message,
     });
   }
 });
 
 /**
- * START SERVER (RENDER REQUIREMENT)
+ * START SERVER (RENDER)
  */
 const PORT = process.env.PORT || 10000;
 
