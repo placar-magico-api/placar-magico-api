@@ -10,31 +10,29 @@ app.use(express.json());
 
 const API_KEY = process.env.FOOTBALL_API_KEY;
 
-/* =====================================================
-   POISSON SIMPLES (MOTOR DENTRO DO INDEX PRA NÃO QUEBRAR)
-===================================================== */
+/* =========================
+   MOTOR DE PREVISÃO SIMPLES
+========================= */
+
+function factorial(n) {
+  let r = 1;
+  for (let i = 2; i <= n; i++) r *= i;
+  return r;
+}
 
 function poisson(lam, x) {
   return (Math.pow(lam, x) * Math.exp(-lam)) / factorial(x);
 }
 
-// factorial simples
-function factorial(n) {
-  if (n === 0 || n === 1) return 1;
-  let res = 1;
-  for (let i = 2; i <= n; i++) res *= i;
-  return res;
-}
-
-function predict(homeAvg, awayAvg) {
-  let homeWin = 0,
-    draw = 0,
-    awayWin = 0;
+function predict(home, away) {
+  let homeWin = 0;
+  let draw = 0;
+  let awayWin = 0;
 
   for (let h = 0; h <= 5; h++) {
     for (let a = 0; a <= 5; a++) {
       const p =
-        poisson(homeAvg, h) * poisson(awayAvg, a);
+        poisson(home, h) * poisson(away, a);
 
       if (h > a) homeWin += p;
       else if (h === a) draw += p;
@@ -42,42 +40,25 @@ function predict(homeAvg, awayAvg) {
     }
   }
 
-  const scores = [];
-
-  for (let h = 0; h <= 5; h++) {
-    for (let a = 0; a <= 5; a++) {
-      scores.push({
-        home: h,
-        away: a,
-        prob: poisson(homeAvg, h) * poisson(awayAvg, a),
-      });
-    }
-  }
-
-  scores.sort((a, b) => b.prob - a.prob);
-
   return {
-    probabilities: {
-      homeWin: Number(homeWin.toFixed(4)),
-      draw: Number(draw.toFixed(4)),
-      awayWin: Number(awayWin.toFixed(4)),
-    },
-    topScores: scores.slice(0, 5),
+    homeWin: Number(homeWin.toFixed(4)),
+    draw: Number(draw.toFixed(4)),
+    awayWin: Number(awayWin.toFixed(4)),
   };
 }
 
-/* =====================================================
+/* =========================
    HEALTH CHECK
-===================================================== */
+========================= */
+
 app.get("/", (req, res) => {
-  res.json({
-    status: "API Placar Mágico rodando 🚀",
-  });
+  res.json({ ok: true, api: "Placar Mágico rodando" });
 });
 
-/* =====================================================
+/* =========================
    JOGOS DE HOJE
-===================================================== */
+========================= */
+
 app.get("/matches/today", async (req, res) => {
   try {
     const today = new Date().toISOString().split("T")[0];
@@ -90,26 +71,23 @@ app.get("/matches/today", async (req, res) => {
         },
         params: {
           date: today,
+          league: 39,
+          season: 2025,
         },
       }
     );
 
-    const matches = response.data.response.map((item) => {
+    const matches = response.data.response.map((m) => {
       return {
-        league: item.league.name,
-        country: item.league.country,
-        home: item.teams.home.name,
-        away: item.teams.away.name,
-        goalsHome: item.goals.home,
-        goalsAway: item.goals.away,
-        status: item.fixture.status.short,
-        date: item.fixture.date,
+        league: m.league.name,
+        home: m.teams.home.name,
+        away: m.teams.away.name,
+        status: m.fixture.status.short,
 
-        // fallback simples pra não quebrar
-        homeAvg: 1.4,
-        awayAvg: 1.1,
+        goalsHome: m.goals.home,
+        goalsAway: m.goals.away,
 
-        prediction: predict(1.4, 1.1),
+        prediction: predict(1.4, 1.2),
       };
     });
 
@@ -118,25 +96,26 @@ app.get("/matches/today", async (req, res) => {
       count: matches.length,
       matches,
     });
-  } catch (error) {
-    res.status(500).json({
+  } catch (err) {
+    res.json({
       success: false,
-      error: error.response?.data || error.message,
+      error: err.response?.data || err.message,
     });
   }
 });
 
-/* =====================================================
-   BACKTEST (JOGOS PASSADOS)
-===================================================== */
+/* =========================
+   BACKTEST
+========================= */
+
 app.get("/backtest", async (req, res) => {
   try {
     const { date } = req.query;
 
     if (!date) {
-      return res.status(400).json({
+      return res.json({
         success: false,
-        error: "Envie ?date=YYYY-MM-DD",
+        error: "envie ?date=YYYY-MM-DD",
       });
     }
 
@@ -148,17 +127,17 @@ app.get("/backtest", async (req, res) => {
         },
         params: {
           date,
+          league: 39,
+          season: 2025,
         },
       }
     );
 
-    const matches = response.data.response.map((item) => ({
-      league: item.league.name,
-      home: item.teams.home.name,
-      away: item.teams.away.name,
-      homeGoals: item.goals.home,
-      awayGoals: item.goals.away,
-      status: item.fixture.status.short,
+    const matches = response.data.response.map((m) => ({
+      home: m.teams.home.name,
+      away: m.teams.away.name,
+      homeGoals: m.goals.home,
+      awayGoals: m.goals.away,
     }));
 
     res.json({
@@ -166,47 +145,20 @@ app.get("/backtest", async (req, res) => {
       count: matches.length,
       matches,
     });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error.response?.data || error.message,
-    });
-  }
-});
-
-/* =====================================================
-   ENDPOINT DE TEST DE PREVISÃO (AQUI É O QUE VOCÊ QUERIA)
-===================================================== */
-app.post("/predict", (req, res) => {
-  try {
-    const { homeAvg, awayAvg } = req.body;
-
-    if (!homeAvg || !awayAvg) {
-      return res.status(400).json({
-        success: false,
-        error: "Envie homeAvg e awayAvg",
-      });
-    }
-
-    const result = predict(homeAvg, awayAvg);
-
+  } catch (err) {
     res.json({
-      success: true,
-      prediction: result,
-    });
-  } catch (error) {
-    res.status(500).json({
       success: false,
-      error: error.message,
+      error: err.response?.data || err.message,
     });
   }
 });
 
-/* =====================================================
+/* =========================
    START SERVER
-===================================================== */
+========================= */
+
 const PORT = process.env.PORT || 10000;
 
 app.listen(PORT, () => {
-  console.log("🚀 API rodando na porta", PORT);
+  console.log("API rodando na porta", PORT);
 });
