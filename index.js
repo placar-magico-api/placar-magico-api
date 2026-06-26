@@ -2,131 +2,148 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const axios = require("axios");
+const fs = require("fs");
 
 const app = express();
 
 app.use(cors());
 app.use(express.json());
 
-// =====================
-// CONFIG
-// =====================
 const API_KEY = process.env.FOOTBALL_API_KEY;
+const DB_FILE = "./db.json";
 
 // =====================
-// HEALTH CHECK
+// HELPERS (BANCO LOCAL)
+// =====================
+function readDB() {
+  if (!fs.existsSync(DB_FILE)) return { matches: [] };
+  return JSON.parse(fs.readFileSync(DB_FILE));
+}
+
+function writeDB(data) {
+  fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2));
+}
+
+// =====================
+// HEALTH
 // =====================
 app.get("/", (req, res) => {
-  res.json({
-    status: "Placar Mágico API rodando 🚀",
-    api_loaded: !!API_KEY,
-  });
+  res.json({ status: "Placar Mágico rodando 🚀" });
 });
 
 // =====================
-// MATCHES TODAY (ROBUSTO - SEM FALLBACK QUE QUEBRA)
+// MATCHES TODAY (API + MANUAL + SAVE)
 // =====================
 app.get("/matches/today", async (req, res) => {
   try {
     const today = new Date().toISOString().split("T")[0];
 
-    const response = await axios.get(
-      "https://v3.football.api-sports.io/fixtures",
+    let apiMatches = [];
+
+    try {
+      const response = await axios.get(
+        "https://v3.football.api-sports.io/fixtures",
+        {
+          headers: {
+            "x-apisports-key": API_KEY,
+          },
+          params: { date: today },
+        }
+      );
+
+      apiMatches = response.data.response || [];
+    } catch (e) {
+      console.log("API error:", e.message);
+    }
+
+    // =====================
+    // MANUAL MATCHES (VOCÊ PODE EDITAR AQUI)
+    // =====================
+    const manualMatches = [
       {
-        headers: {
-          "x-apisports-key": API_KEY,
-        },
-        params: {
-          date: today,
-        },
-      }
-    );
+        league: "MANUAL LEAGUE",
+        country: "Manual",
+        home: "Time A",
+        away: "Time B",
+        homeGoals: null,
+        awayGoals: null,
+        status: "NS",
+        time: today,
+        source: "manual",
+      },
+    ];
 
-    const matches = response.data.response || [];
+    // =====================
+    // FORMAT API MATCHES
+    // =====================
+    const formattedApi = apiMatches.map((item) => ({
+      league: item.league.name,
+      country: item.league.country,
+      home: item.teams.home.name,
+      away: item.teams.away.name,
+      homeGoals: item.goals.home,
+      awayGoals: item.goals.away,
+      status: item.fixture.status.short,
+      time: item.fixture.date,
+      source: "api",
+    }));
 
-    // 🔥 NÃO ESCONDE MAIS O PROBLEMA
-    return res.json({
+    const allMatches = [...formattedApi, ...manualMatches];
+
+    // =====================
+    // SAVE NO BANCO LOCAL
+    // =====================
+    const db = readDB();
+    db.matches.push(...allMatches);
+    writeDB(db);
+
+    res.json({
       success: true,
-      source: "today",
-      count: matches.length,
-      message:
-        matches.length === 0
-          ? "Nenhum jogo encontrado para hoje nessa API/plano."
-          : "Jogos carregados com sucesso",
-      matches: matches.map((item) => ({
-        league: item.league.name,
-        country: item.league.country,
-        home: item.teams.home.name,
-        away: item.teams.away.name,
-        homeGoals: item.goals.home,
-        awayGoals: item.goals.away,
-        status: item.fixture.status.short,
-        time: item.fixture.date,
-      })),
+      count: allMatches.length,
+      matches: allMatches,
     });
   } catch (error) {
-    return res.status(500).json({
+    res.status(500).json({
       success: false,
-      error: error.response?.data || error.message,
+      error: error.message,
     });
   }
 });
 
 // =====================
-// BACKTEST (COM SEASON DINÂMICA - CORRIGIDO)
+// BACKTEST (USA BANCO LOCAL)
 // =====================
-app.get("/backtest", async (req, res) => {
-  try {
-    const { date } = req.query;
+app.get("/backtest", (req, res) => {
+  const db = readDB();
 
-    if (!date) {
-      return res.status(400).json({
-        success: false,
-        error: "Envie ?date=YYYY-MM-DD",
-      });
-    }
+  const played = db.matches.filter(
+    (m) => m.homeGoals !== null && m.awayGoals !== null
+  );
 
-    const season = new Date(date).getFullYear();
+  res.json({
+    success: true,
+    count: played.length,
+    matches: played,
+  });
+});
 
-    const response = await axios.get(
-      "https://v3.football.api-sports.io/fixtures",
-      {
-        headers: {
-          "x-apisports-key": API_KEY,
-        },
-        params: {
-          date,
-          season,
-        },
-      }
-    );
+// =====================
+// ADD MANUAL MATCH
+// =====================
+app.post("/manual", (req, res) => {
+  const db = readDB();
 
-    const matches = response.data.response || [];
+  db.matches.push({
+    ...req.body,
+    source: "manual",
+  });
 
-    return res.json({
-      success: true,
-      source: "backtest",
-      count: matches.length,
-      message:
-        matches.length === 0
-          ? "Nenhum jogo encontrado nessa data/season (limitação da API ou data sem jogos)."
-          : "Backtest carregado com sucesso",
-      matches: matches.map((item) => ({
-        league: item.league.name,
-        country: item.league.country,
-        home: item.teams.home.name,
-        away: item.teams.away.name,
-        homeGoals: item.goals.home,
-        awayGoals: item.goals.away,
-        status: item.fixture.status.short,
-      })),
-    });
-  } catch (error) {
-    return res.status(500).json({
-      success: false,
-      error: error.response?.data || error.message,
-    });
-  }
+  writeDB(db);
+
+  res.json({
+    success: true,
+    message: "Jogo manual salvo",
+  });
 });
 
 // =====================
@@ -135,5 +152,5 @@ app.get("/backtest", async (req, res) => {
 const PORT = process.env.PORT || 10000;
 
 app.listen(PORT, () => {
-  console.log("🚀 API rodando na porta " + PORT);
+  console.log("🚀 Placar Mágico rodando na porta " + PORT);
 });
